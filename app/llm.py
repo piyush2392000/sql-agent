@@ -20,6 +20,18 @@ class LLMConfigError(RuntimeError):
     pass
 
 
+GROQ_BASE_URL = "https://api.groq.com/openai/v1"
+
+
+def resolve_base_url(api_key: str, base_url: str | None) -> str | None:
+    """Explicit LLM_BASE_URL wins. Otherwise a Groq key (gsk_...) implies Groq, so a missing
+    LLM_BASE_URL can never send a Groq key to api.openai.com."""
+    base_url = (base_url or "").strip()
+    if base_url:
+        return base_url
+    return GROQ_BASE_URL if api_key.startswith("gsk_") else None
+
+
 @lru_cache(maxsize=1)
 def get_llm():
     if os.environ.get("AZURE_OPENAI_ENDPOINT"):
@@ -35,10 +47,11 @@ def get_llm():
         raise LLMConfigError("No LLM API key configured. Set LLM_API_KEY (see .env.example).")
     from langchain_openai import ChatOpenAI
 
+    api_key = api_key.strip()  # a stray space/newline from copy-paste causes 401s
     return ChatOpenAI(
         model=os.environ.get("LLM_MODEL", "gpt-4o-mini"),
         api_key=api_key,
-        base_url=os.environ.get("LLM_BASE_URL") or None,
+        base_url=resolve_base_url(api_key, os.environ.get("LLM_BASE_URL")),
         temperature=0, timeout=60, max_retries=2,
     )
 
