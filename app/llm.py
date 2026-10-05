@@ -32,6 +32,17 @@ def resolve_base_url(api_key: str, base_url: str | None) -> str | None:
     return GROQ_BASE_URL if api_key.startswith("gsk_") else None
 
 
+GROQ_DEFAULT_MODEL = "openai/gpt-oss-120b"
+
+
+def resolve_model(base_url: str | None, model: str | None) -> str:
+    """Explicit LLM_MODEL wins. Otherwise pick a default that exists on the chosen provider."""
+    model = (model or "").strip()
+    if model:
+        return model
+    return GROQ_DEFAULT_MODEL if base_url and "groq.com" in base_url else "gpt-4o-mini"
+
+
 @lru_cache(maxsize=1)
 def get_llm():
     if os.environ.get("AZURE_OPENAI_ENDPOINT"):
@@ -48,10 +59,11 @@ def get_llm():
     from langchain_openai import ChatOpenAI
 
     api_key = api_key.strip()  # a stray space/newline from copy-paste causes 401s
+    base_url = resolve_base_url(api_key, os.environ.get("LLM_BASE_URL"))
     return ChatOpenAI(
-        model=os.environ.get("LLM_MODEL", "gpt-4o-mini"),
+        model=resolve_model(base_url, os.environ.get("LLM_MODEL")),
         api_key=api_key,
-        base_url=resolve_base_url(api_key, os.environ.get("LLM_BASE_URL")),
+        base_url=base_url,
         temperature=0, timeout=60, max_retries=2,
     )
 
