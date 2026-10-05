@@ -1,0 +1,337 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SQL Query Agent</title>
+<style>
+:root{
+  --bg:#f6f7f9; --panel:#ffffff; --panel2:#f0f2f5; --text:#1b1f27; --muted:#66707f; --line:#e1e5eb;
+  --accent:#2f5bea; --accent-ink:#fff; --ok:#16794c; --warn:#a15c00; --err:#b42318; --warn-bg:#fff4e0; --err-bg:#fdecea; --ok-bg:#e7f6ee;
+  --kw:#7c3aed; --fn:#0b7285; --str:#b4531a; --num:#1f7a3d; --cmt:#8a94a3;
+  --radius:12px; --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+:root[data-theme=dark]{
+  --bg:#0f1218; --panel:#171b23; --panel2:#1e232d; --text:#e7eaf0; --muted:#97a1b2; --line:#2a303c;
+  --accent:#6b8cff; --accent-ink:#0b1020; --ok:#4cc38a; --warn:#f0b050; --err:#ff7b72; --warn-bg:#2b2213; --err-bg:#2c1816; --ok-bg:#13261d;
+  --kw:#c4a1ff; --fn:#5fd0e0; --str:#f0a070; --num:#7ee0a0; --cmt:#6b7585;
+}
+*{box-sizing:border-box}
+a{color:var(--accent)}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--text);font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;display:flex;flex-direction:column}
+button{font:inherit;color:inherit;cursor:pointer}
+header{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;padding:10px 16px;background:var(--panel);border-bottom:1px solid var(--line)}
+header h1{font-size:16px;margin:0;font-weight:650;letter-spacing:.2px}
+header .sp{flex:1}
+.pill,select,.btn{border:1px solid var(--line);background:var(--panel2);border-radius:8px;padding:6px 10px;font-size:13px;color:var(--text)}
+.btn:hover,.pill:hover{border-color:var(--accent)}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+label.chk{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--muted)}
+main{flex:1;min-height:0;display:grid;grid-template-columns:240px minmax(320px,1fr) minmax(360px,1.1fr);gap:12px;padding:12px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);min-height:0;display:flex;flex-direction:column;overflow:hidden}
+.card h2{font-size:12px;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);margin:0;padding:10px 14px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:8px}
+.card h2 .sp{flex:1}
+.scroll{overflow:auto;min-height:0;flex:1}
+/* sidebar */
+.side{gap:0}
+.hist{padding:8px;display:flex;flex-direction:column;gap:4px}
+.hist button{text-align:left;background:none;border:0;border-radius:8px;padding:7px 9px;font-size:13px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hist button:hover,.hist button.on{background:var(--panel2)}
+.empty{color:var(--muted);font-size:13px;padding:10px 14px}
+details.tbl{border-top:1px solid var(--line);padding:6px 12px;font-size:13px}
+details.tbl summary{cursor:pointer;font-weight:600}
+details.tbl ul{margin:4px 0 6px;padding-left:16px;color:var(--muted);font-family:var(--mono);font-size:12px}
+/* chat */
+#chat{padding:14px;display:flex;flex-direction:column;gap:12px}
+.msg{max-width:92%;padding:10px 13px;border-radius:12px;white-space:pre-wrap;word-wrap:break-word}
+.msg.user{align-self:flex-end;background:var(--accent);color:var(--accent-ink);border-bottom-right-radius:4px}
+.msg.bot{align-self:flex-start;background:var(--panel2);border-bottom-left-radius:4px;cursor:pointer;border:1px solid transparent}
+.msg.bot.sel{border-color:var(--accent)}
+.msg.refused{background:var(--warn-bg);color:var(--warn)}
+.msg.error{background:var(--err-bg);color:var(--err)}
+.msg .tag{display:block;font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;margin-bottom:3px;opacity:.85}
+.examples{display:flex;flex-wrap:wrap;gap:8px;padding:14px}
+.examples button{background:var(--panel2);border:1px solid var(--line);border-radius:999px;padding:6px 12px;font-size:13px}
+.examples button:hover{border-color:var(--accent)}
+.composer{display:flex;gap:8px;padding:10px;border-top:1px solid var(--line)}
+.composer textarea{flex:1;resize:none;border:1px solid var(--line);background:var(--bg);color:var(--text);border-radius:10px;padding:9px 11px;font:inherit;max-height:140px}
+.composer textarea:focus{outline:2px solid color-mix(in srgb,var(--accent) 45%,transparent);border-color:var(--accent)}
+.loading{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:13px;align-self:flex-start}
+.spin{width:16px;height:16px;border:2px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:s .8s linear infinite}
+@keyframes s{to{transform:rotate(360deg)}}
+/* output panel */
+.sec{border-bottom:1px solid var(--line)}
+.sec:last-child{border-bottom:0}
+.sec .hd{display:flex;align-items:center;gap:8px;padding:9px 14px 0;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--muted)}
+.sec .hd .sp{flex:1}
+.sec .bd{padding:8px 14px 14px}
+pre.sql{margin:0;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:12px;overflow:auto;font:13px/1.55 var(--mono);white-space:pre}
+.k{color:var(--kw);font-weight:600}.f{color:var(--fn)}.s{color:var(--str)}.n{color:var(--num)}.c{color:var(--cmt);font-style:italic}
+.chip{display:inline-block;border-radius:999px;padding:2px 9px;font-size:12px;font-weight:600;margin-right:6px}
+.chip.ok{background:var(--ok-bg);color:var(--ok)}.chip.warn{background:var(--warn-bg);color:var(--warn)}.chip.err{background:var(--err-bg);color:var(--err)}.chip.neu{background:var(--panel2);color:var(--muted)}
+ul.plain{margin:6px 0 0;padding-left:18px}ul.plain li{margin:3px 0}
+.tablewrap{overflow:auto;max-height:340px;border:1px solid var(--line);border-radius:10px}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{padding:6px 10px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}
+th{position:sticky;top:0;background:var(--panel2);font-weight:650}
+td.num{text-align:right;font-variant-numeric:tabular-nums}
+td.null{color:var(--muted);font-style:italic}
+.muted{color:var(--muted);font-size:13px}
+.idx{font:12px var(--mono);background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:6px 8px;margin-top:6px;overflow:auto;white-space:pre}
+.banner{margin:12px 14px 0;padding:9px 12px;border-radius:10px;background:var(--err-bg);color:var(--err);font-size:13px}
+@media (max-width:1050px){
+  main{grid-template-columns:1fr;grid-auto-rows:minmax(360px,auto);overflow:auto}
+  body{overflow:auto}
+  .side{order:3}
+}
+</style>
+</head>
+<body>
+<header>
+  <h1>SQL Query Agent</h1>
+  <span class="pill" id="dbpill" title="Sample database">sample.db</span>
+  <span class="sp"></span>
+  <select id="dialect" title="SQL dialect">
+    <option value="sqlite">SQLite</option><option value="postgres">PostgreSQL</option><option value="mysql">MySQL</option>
+  </select>
+  <label class="chk"><input type="checkbox" id="exec" checked> Run query</label>
+  <button class="btn" id="theme" title="Toggle dark mode">Dark</button>
+  <button class="btn" id="new">New chat</button>
+</header>
+<div id="banner" class="banner" hidden></div>
+<main>
+  <section class="card side">
+    <h2>Conversation history</h2>
+    <div class="scroll"><div class="hist" id="hist"><div class="empty">Your questions will appear here.</div></div>
+    <h2 style="border-top:1px solid var(--line)">Schema</h2><div id="schema"></div></div>
+  </section>
+
+  <section class="card">
+    <h2>Chat</h2>
+    <div class="scroll" id="chatscroll">
+      <div class="examples" id="examples"></div>
+      <div id="chat"></div>
+    </div>
+    <form class="composer" id="form">
+      <textarea id="input" rows="1" placeholder="Ask about the database, or paste SQL to explain / optimize / debug…" maxlength="4000"></textarea>
+      <button class="btn primary" id="send" type="submit">Send</button>
+    </form>
+  </section>
+
+  <section class="card">
+    <h2>Generated SQL <span class="sp"></span>
+      <button class="btn" id="copy" disabled>Copy SQL</button>
+      <button class="btn" id="dlsql" disabled>Download .sql</button></h2>
+    <div class="scroll" id="out"><div class="empty">Ask a question to see the SQL, a plain-English explanation, validation checks and results here.</div></div>
+  </section>
+</main>
+
+<script>
+(() => {
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const store = { get(k, d){ try { return localStorage.getItem(k) ?? d; } catch { return d; } }, set(k, v){ try { localStorage.setItem(k, v); } catch {} } };
+
+const EXAMPLES = [
+  'Show all employees hired after January 2024',
+  'Total sales amount per product category',
+  'Top 5 customers by total order value',
+  'Which departments have an average salary above 90000?',
+  'Who won the FIFA World Cup?',
+  'Delete all customers'
+];
+const STEP_LABELS = { guard:'Checking request', intent:'Understanding intent', info:'Answering', schema:'Retrieving schema', generate:'Writing SQL',
+  validate:'Validating SQL', optimize:'Optimizing', execute:'Running query', explain:'Explaining', respond:'Finishing' };
+
+let sessionId = store.get('sqlagent.session', '') || null;
+let busy = false, current = null, turns = [];  // turns: {user, resp}
+
+// ---------- theme
+function applyTheme(t){ document.documentElement.dataset.theme = t; $('theme').textContent = t === 'dark' ? 'Light' : 'Dark'; store.set('sqlagent.theme', t); }
+applyTheme(store.get('sqlagent.theme', matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'));
+$('theme').onclick = () => applyTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark');
+
+// ---------- SQL highlighting (small tokenizer, no dependencies)
+const KW = new Set('select from where group by order having limit offset join inner left right full outer cross on using as and or not in is null like between exists case when then else end distinct union all with asc desc over partition count sum avg min max'.split(' '));
+const FN = new Set('count sum avg min max round coalesce ifnull strftime date datetime substr lower upper length cast abs'.split(' '));
+function highlight(sql){
+  const re = /(--[^\n]*|\/\*[\s\S]*?\*\/)|('(?:[^']|'')*')|(\b\d+(?:\.\d+)?\b)|([A-Za-z_][A-Za-z0-9_]*)|([\s\S])/g;
+  let out = '', m;
+  while ((m = re.exec(sql))) {
+    if (m[1]) out += `<span class="c">${esc(m[1])}</span>`;
+    else if (m[2]) out += `<span class="s">${esc(m[2])}</span>`;
+    else if (m[3]) out += `<span class="n">${esc(m[3])}</span>`;
+    else if (m[4]) {
+      const w = m[4].toLowerCase();
+      const next = sql.slice(re.lastIndex).match(/^\s*\(/);
+      out += KW.has(w) && !(FN.has(w) && next) ? `<span class="k">${esc(m[4])}</span>` : (FN.has(w) && next ? `<span class="f">${esc(m[4])}</span>` : esc(m[4]));
+    } else out += esc(m[5]);
+  }
+  return out;
+}
+function prettySql(sql){
+  return sql.replace(/\s+/g, ' ').trim()
+    .replace(/\s+(FROM|WHERE|GROUP BY|ORDER BY|HAVING|LIMIT|UNION ALL|UNION)\b/gi, '\n$1')
+    .replace(/\s+((?:LEFT |RIGHT |INNER |FULL |CROSS )?(?:OUTER )?JOIN)\b/gi, '\n  $1');
+}
+
+// ---------- rendering
+function addMsg(kind, text, extra = ''){
+  const d = document.createElement('div');
+  d.className = 'msg ' + kind + ' ' + extra;
+  d.textContent = text;
+  $('chat').appendChild(d); scrollChat();
+  return d;
+}
+function scrollChat(){ const s = $('chatscroll'); s.scrollTop = s.scrollHeight; }
+
+function renderResult(r){
+  if (!r) return '';
+  if (r.error) return `<div class="muted" style="color:var(--err)">${esc(r.error)}</div>`;
+  if (!r.columns?.length) return '<div class="muted">The query returned no columns.</div>';
+  const head = r.columns.map(c => `<th>${esc(c)}</th>`).join('');
+  const body = r.rows.map(row => '<tr>' + row.map(v =>
+    v === null ? '<td class="null">NULL</td>' : `<td class="${typeof v === 'number' ? 'num' : ''}">${esc(v)}</td>`).join('') + '</tr>').join('');
+  return `<div class="tablewrap"><table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>
+    <div class="muted" style="margin-top:6px">${r.row_count} row${r.row_count === 1 ? '' : 's'}${r.truncated ? ' (truncated; showing first ' + r.row_count + ')' : ''} · ${r.elapsed_ms} ms
+    · <a href="#" id="dlcsv">Download CSV</a></div>`;
+}
+
+function renderOutput(resp){
+  current = resp;
+  $('copy').disabled = $('dlsql').disabled = !resp?.sql;
+  const out = $('out');
+  if (!resp) { out.innerHTML = '<div class="empty">Ask a question to see the SQL, a plain-English explanation, validation checks and results here.</div>'; return; }
+  let h = '';
+  if (resp.sql) {
+    h += `<div class="sec"><div class="hd">SQL · ${esc(resp.dialect)}</div><div class="bd"><pre class="sql">${highlight(prettySql(resp.sql))}</pre></div></div>`;
+    if (resp.explanation) h += `<div class="sec"><div class="hd">Explanation</div><div class="bd">${esc(resp.explanation)}</div></div>`;
+    if (resp.notes?.length) h += `<div class="sec"><div class="hd">${resp.intent === 'debug' ? 'What was wrong' : 'Changes'}</div><div class="bd"><ul class="plain">${resp.notes.map(n => `<li>${esc(n)}</li>`).join('')}</ul></div></div>`;
+    const v = resp.validation || {};
+    const plan = resp.optimization?.plan;
+    let chips = `<span class="chip ${v.valid ? 'ok' : 'err'}">${v.valid ? '✓ Valid' : 'Invalid'}</span><span class="chip ok">✓ Read-only</span>`;
+    if (plan) chips += `<span class="chip ${plan.estimated_cost === 'low' ? 'ok' : plan.estimated_cost === 'medium' ? 'warn' : 'err'}" title="Estimated from EXPLAIN QUERY PLAN">Cost: ${esc(plan.estimated_cost)}</span>`;
+    if (resp.attempts > 1) chips += `<span class="chip neu">Self-corrected (${resp.attempts} attempts)</span>`;
+    let checks = chips;
+    if (resp.warnings?.length) checks += `<ul class="plain">${resp.warnings.map(w => `<li style="color:var(--warn)">${esc(w)}</li>`).join('')}</ul>`;
+    h += `<div class="sec"><div class="hd">Validation</div><div class="bd">${checks}</div></div>`;
+    const opt = resp.optimization || {};
+    if (opt.suggestions?.length || opt.indexes?.length) {
+      h += `<div class="sec"><div class="hd">Optimization</div><div class="bd">`;
+      if (opt.suggestions?.length) h += `<ul class="plain">${opt.suggestions.map(s => `<li>${esc(s)}</li>`).join('')}</ul>`;
+      (opt.indexes || []).forEach(i => h += `<div class="muted" style="margin-top:8px">${esc(i.reason)}</div><div class="idx">${esc(i.ddl)}</div>`);
+      h += '</div></div>';
+    }
+    if (resp.result) h += `<div class="sec"><div class="hd">Results</div><div class="bd">${renderResult(resp.result)}</div></div>`;
+  } else {
+    h += `<div class="sec"><div class="bd">${esc(resp.message || 'No SQL was produced.')}</div></div>`;
+  }
+  out.innerHTML = h;
+  const dl = $('dlcsv'); if (dl) dl.onclick = e => { e.preventDefault(); download('results.csv', toCsv(resp.result), 'text/csv'); };
+}
+
+function toCsv(r){
+  const q = v => v === null ? '' : /[",\n]/.test(String(v)) ? '"' + String(v).replace(/"/g, '""') + '"' : String(v);
+  return [r.columns.map(q).join(','), ...r.rows.map(row => row.map(q).join(','))].join('\n');
+}
+function download(name, text, type){
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([text], { type }));
+  a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+$('copy').onclick = async () => {
+  if (!current?.sql) return;
+  try { await navigator.clipboard.writeText(current.sql); }
+  catch { const t = document.createElement('textarea'); t.value = current.sql; document.body.appendChild(t); t.select(); document.execCommand('copy'); t.remove(); }
+  $('copy').textContent = 'Copied ✓'; setTimeout(() => $('copy').textContent = 'Copy SQL', 1400);
+};
+$('dlsql').onclick = () => current?.sql && download('query.sql', current.sql + ';\n', 'text/plain');
+
+function renderHistory(){
+  const h = $('hist');
+  if (!turns.length) { h.innerHTML = '<div class="empty">Your questions will appear here.</div>'; return; }
+  h.innerHTML = '';
+  turns.forEach((t, i) => {
+    const b = document.createElement('button');
+    b.textContent = t.user; b.title = t.user;
+    b.onclick = () => { selectTurn(i); };
+    if (t.resp === current) b.className = 'on';
+    h.appendChild(b);
+  });
+}
+function selectTurn(i){
+  const t = turns[i]; if (!t?.resp) return;
+  renderOutput(t.resp); renderHistory();
+  document.querySelectorAll('.msg.bot').forEach(el => el.classList.toggle('sel', el.dataset.i == i));
+}
+
+// ---------- sending (SSE streaming)
+function showBanner(msg){ const b = $('banner'); b.textContent = msg; b.hidden = !msg; }
+
+async function send(text){
+  if (busy || !text.trim()) return;
+  busy = true; $('send').disabled = true; showBanner('');
+  $('examples').style.display = 'none';
+  addMsg('user', text);
+  const loading = document.createElement('div'); loading.className = 'loading';
+  loading.innerHTML = '<div class="spin"></div><span id="step">Thinking…</span>';
+  $('chat').appendChild(loading); scrollChat();
+  let final = null, errorMsg = null;
+  try {
+    const res = await fetch('/api/chat/stream', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: text, session_id: sessionId, dialect: $('dialect').value, execute: $('exec').checked }) });
+    if (!res.ok) { const j = await res.json().catch(() => ({})); throw new Error(j.detail || `Server error (${res.status})`); }
+    const reader = res.body.getReader(), dec = new TextDecoder(); let buf = '';
+    while (true) {
+      const { value, done } = await reader.read(); if (done) break;
+      buf += dec.decode(value, { stream: true });
+      let idx;
+      while ((idx = buf.indexOf('\n\n')) >= 0) {
+        const block = buf.slice(0, idx); buf = buf.slice(idx + 2);
+        const ev = /^event: (.+)$/m.exec(block)?.[1], data = /^data: (.+)$/m.exec(block)?.[1];
+        if (!ev || !data) continue;
+        const d = JSON.parse(data);
+        if (ev === 'session') { sessionId = d.session_id; store.set('sqlagent.session', sessionId); }
+        else if (ev === 'step') { const s = $('step'); if (s) s.textContent = (STEP_LABELS[d.node] || d.node) + '…'; }
+        else if (ev === 'final') final = d;
+        else if (ev === 'error') errorMsg = d.detail;
+      }
+    }
+  } catch (e) { errorMsg = e.message || 'Network error'; }
+  loading.remove();
+  if (errorMsg || !final) {
+    addMsg('bot error', errorMsg || 'No response received.'); showBanner(errorMsg || 'No response received.');
+  } else {
+    const i = turns.push({ user: text, resp: final }) - 1;
+    const kind = final.status === 'refused' ? 'refused' : final.status === 'error' ? 'error' : '';
+    const label = { refused: 'Declined', clarify: 'Question', error: 'Could not complete' }[final.status];
+    const body = final.status === 'ok' && final.sql ? (final.explanation || 'Done.') : (final.message || final.explanation || '');
+    const d = addMsg('bot', '', kind); d.dataset.i = i;
+    d.innerHTML = (label ? `<div class="tag">${label}</div>` : '') + esc(body);
+    d.onclick = () => selectTurn(i);
+    selectTurn(i);
+  }
+  busy = false; $('send').disabled = false; $('input').focus();
+}
+
+$('form').onsubmit = e => { e.preventDefault(); const t = $('input').value; $('input').value = ''; autosize(); send(t); };
+$('input').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); $('form').requestSubmit(); } });
+function autosize(){ const t = $('input'); t.style.height = 'auto'; t.style.height = Math.min(t.scrollHeight, 140) + 'px'; }
+$('input').addEventListener('input', autosize);
+$('new').onclick = () => { sessionId = null; store.set('sqlagent.session', ''); turns = []; $('chat').innerHTML = ''; $('examples').style.display = ''; renderOutput(null); renderHistory(); showBanner(''); };
+
+// ---------- init: examples, schema browser, health
+EXAMPLES.forEach(q => { const b = document.createElement('button'); b.type = 'button'; b.textContent = q; b.onclick = () => send(q); $('examples').appendChild(b); });
+fetch('/api/schema').then(r => r.json()).then(s => {
+  $('schema').innerHTML = Object.entries(s).map(([t, info]) =>
+    `<details class="tbl"><summary>${esc(t)} <span class="muted">(${info.row_count})</span></summary><ul>${info.columns.map(c => `<li>${esc(c.name)} ${esc(c.type)}${c.pk ? ' 🔑' : ''}</li>`).join('')}</ul></details>`).join('');
+}).catch(() => {});
+fetch('/api/health').then(r => r.json()).then(h => { if (!h.llm_configured) showBanner('The server has no LLM API key configured (set LLM_API_KEY).'); }).catch(() => {});
+// a fresh page load starts a fresh visible chat; server memory is keyed by session id
+sessionId = null; store.set('sqlagent.session', '');
+})();
+</script>
+</body>
+</html>
